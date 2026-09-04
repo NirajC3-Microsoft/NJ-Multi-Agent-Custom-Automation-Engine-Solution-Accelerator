@@ -1,6 +1,8 @@
 name: Test Workflow with Coverage
 
 on:
+  workflow_dispatch:
+
   push:
     branches:
       - main
@@ -15,6 +17,7 @@ on:
       - 'conftest.py'
       - '.github/requirements.txt'
       - '.github/workflows/test.yml'
+
   pull_request:
     types:
       - opened
