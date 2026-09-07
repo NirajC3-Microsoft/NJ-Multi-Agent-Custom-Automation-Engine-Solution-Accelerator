@@ -1,0 +1,132 @@
+# Azure DevOps Pipeline: Backend Unit Tests with Coverage
+# Mirrors the GitHub Actions workflow .github/workflows/test.yml for ADO.
+
+name: 'Unit Tests $(Date:yyyyMMdd)$(Rev:.r)'
+
+trigger:
+  branches:
+    include:
+      - main
+      - demo-v4
+      - dev
+  paths:
+    include:
+      - src/backend/**/*.py
+      - src/tests/**/*.py
+      - src/mcp_server/**/*.py
+      - src/**/pyproject.toml
+      - pyproject.toml
+      - conftest.py
+      - .github/requirements.txt
+      - azure-pipelines-unit-tests.yml
+
+pr:
+  branches:
+    include:
+      - main
+      - demo-v4
+      - dev
+  paths:
+    include:
+      - src/backend/**/*.py
+      - src/tests/**/*.py
+      - src/mcp_server/**/*.py
+      - src/**/pyproject.toml
+      - pyproject.toml
+      - conftest.py
+      - .github/requirements.txt
+      - azure-pipelines-unit-tests.yml
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  pythonVersion: '3.11'
+  coverageThreshold: 80
+
+jobs:
+  - job: UnitTests
+    displayName: 'Run backend unit tests'
+    timeoutInMinutes: 30
+    steps:
+      - checkout: self
+        fetchDepth: 1
+        displayName: 'Checkout code'
+
+      - task: UsePythonVersion@0
+        displayName: 'Set up Python $(pythonVersion)'
+        inputs:
+          versionSpec: '$(pythonVersion)'
+          addToPath: true
+
+      - script: |
+          set -e
+          python -m pip install --upgrade pip
+          pip install -r .github/requirements.txt
+        displayName: 'Install dependencies'
+
+      - script: |
+          if [ -z "$(find src -type f -name 'test_*.py')" ]; then
+            echo "No test files found, skipping tests."
+            echo "##vso[task.setvariable variable=skipTests]true"
+          else
+            echo "Test files found, running tests."
+            echo "##vso[task.setvariable variable=skipTests]false"
+          fi
+        displayName: 'Check if test files exist'
+
+      - script: |
+          set -e
+          # test_app.py runs first (isolation required), then remaining backend tests append coverage.
+          python -m pytest src/tests/backend/test_app.py --cov=src/backend -q
+          python -m pytest src/tests/backend \
+            --cov=src/backend \
+            --cov-append \
+            --cov-report=term \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            --junitxml=pytest.xml \
+            --ignore=src/tests/backend/test_app.py
+        displayName: 'Run tests with coverage'
+        condition: and(succeeded(), ne(variables['skipTests'], 'true'))
+        env:
+          PYTHONPATH: 'src:src/backend'
+
+      - task: PublishTestResults@2
+        displayName: 'Publish test results'
+        condition: and(succeededOrFailed(), ne(variables['skipTests'], 'true'))
+        inputs:
+          testResultsFormat: 'JUnit'
+          testResultsFiles: 'pytest.xml'
+          testRunTitle: 'Backend unit tests'
+          failTaskOnFailedTests: true
+
+      - task: PublishCodeCoverageResults@2
+        displayName: 'Publish code coverage'
+        condition: and(succeededOrFailed(), ne(variables['skipTests'], 'true'))
+        inputs:
+          summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage.xml'
+          pathToSources: '$(System.DefaultWorkingDirectory)/src/backend'
+
+      - script: |
+          set -e
+          if [ ! -f coverage.xml ]; then
+            echo "##vso[task.logissue type=error]coverage.xml not found"
+            exit 1
+          fi
+          COVERAGE=$(python -c "import xml.etree.ElementTree as ET; print(float(ET.parse('coverage.xml').getroot().attrib.get('line-rate', 0)) * 100)")
+          echo "Overall coverage: ${COVERAGE}%"
+          if awk -v c="$COVERAGE" -v t="$COVERAGE_THRESHOLD" 'BEGIN { exit (c+0 < t+0) ? 1 : 0 }'; then
+            echo "Coverage threshold met: ${COVERAGE}% >= ${COVERAGE_THRESHOLD}%"
+          else
+            echo "##vso[task.logissue type=error]Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
+            exit 1
+          fi
+        displayName: 'Check coverage threshold'
+        condition: and(succeeded(), ne(variables['skipTests'], 'true'))
+        env:
+          COVERAGE_THRESHOLD: $(coverageThreshold)
+
+      - script: echo "Skipping coverage report because no tests were found."
+        displayName: 'Skip coverage (no tests)'
+        condition: and(succeeded(), eq(variables['skipTests'], 'true'))
