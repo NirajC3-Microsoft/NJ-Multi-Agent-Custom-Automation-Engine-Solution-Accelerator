@@ -1,24 +1,49 @@
 name: Test Automation Macae v4
 
 on:
-    workflow_call:
-        inputs:
-          MACAE_WEB_URL:
-            required: false
-            type: string
-            description: "Web URL for MACAE (overrides environment variable)"
-          MACAE_URL_API:
-            required: false
-            type: string
-            description: "API URL for MACAE (overrides environment variable)"
-          MACAE_RG:
-            required: false
-            type: string
-          TEST_SUITE:
-            required: false
-            type: string
-            default: "GoldenPath-Testing"
-            description: "Test suite to run: 'Smoke-Testing', 'GoldenPath-Testing' "
+  workflow_dispatch:
+    inputs:
+      MACAE_WEB_URL:
+        required: false
+        type: string
+        description: "Web URL for MACAE"
+
+      MACAE_URL_API:
+        required: false
+        type: string
+        description: "API URL for MACAE"
+
+      MACAE_RG:
+        required: false
+        type: string
+
+      TEST_SUITE:
+        required: false
+        type: choice
+        default: "GoldenPath-Testing"
+        description: "Test suite to run"
+        options:
+          - Smoke-Testing
+          - GoldenPath-Testing
+
+  workflow_call:
+    inputs:
+      MACAE_WEB_URL:
+        required: false
+        type: string
+
+      MACAE_URL_API:
+        required: false
+        type: string
+
+      MACAE_RG:
+        required: false
+        type: string
+
+      TEST_SUITE:
+        required: false
+        type: string
+        default: "GoldenPath-Testing"
         outputs:
           TEST_SUCCESS:
             description: "Whether tests passed"
